@@ -123,4 +123,3 @@ func (s *SeqMap[K, V]) Map() map[K]V {
 func NewSeqMap[K comparable, V any]() *SeqMap[K, V] {
 	return &SeqMap[K, V]{dirty: make(map[K]*atomic.Pointer[Value[V]])}
 }
-

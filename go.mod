@@ -1,3 +1,3 @@
-module github.com/RealFax/seq-map
+module github.com/RealFax/order-map
 
 go 1.19
