@@ -1,6 +1,6 @@
 // implementation of high performance concurrent safe ordered map
 
-package seqMap
+package orderMap
 
 import (
 	"sort"
@@ -24,13 +24,13 @@ func (s KVs[K, V]) Len() int           { return len(s) }
 func (s KVs[K, V]) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s KVs[K, V]) Less(i, j int) bool { return s[i].Value.Load().Seq < s[j].Value.Load().Seq }
 
-type SeqMap[K comparable, V any] struct {
+type Map[K comparable, V any] struct {
 	offset int32
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	dirty  map[K]*atomic.Pointer[Value[V]]
 }
 
-func (s *SeqMap[K, V]) Store(key K, value V) {
+func (s *Map[K, V]) Store(key K, value V) {
 	s.mu.Lock()
 	ptr, ok := s.dirty[key]
 	if ok {
@@ -49,10 +49,10 @@ func (s *SeqMap[K, V]) Store(key K, value V) {
 	s.mu.Unlock()
 }
 
-func (s *SeqMap[K, V]) Load(key K) (V, bool) {
-	s.mu.Lock()
+func (s *Map[K, V]) Load(key K) (V, bool) {
+	s.mu.RLock()
 	ptr, ok := s.dirty[key]
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	if !ok {
 		var zero V
 		return zero, false
@@ -61,7 +61,7 @@ func (s *SeqMap[K, V]) Load(key K) (V, bool) {
 	return val.Value, true
 }
 
-func (s *SeqMap[K, V]) Delete(key K) {
+func (s *Map[K, V]) Delete(key K) {
 	s.mu.Lock()
 	ptr, ok := s.dirty[key]
 	if !ok {
@@ -76,8 +76,8 @@ func (s *SeqMap[K, V]) Delete(key K) {
 	s.mu.Unlock()
 }
 
-func (s *SeqMap[K, V]) Range(f func(key K, value V) bool) {
-	s.mu.Lock()
+func (s *Map[K, V]) Range(f func(key K, value V) bool) {
+	s.mu.RLock()
 
 	vs := make(KVs[K, V], atomic.LoadInt32(&s.offset))
 	vsi := 0
@@ -98,20 +98,20 @@ func (s *SeqMap[K, V]) Range(f func(key K, value V) bool) {
 		}
 	}
 
-	s.mu.Unlock()
+	s.mu.RUnlock()
 }
 
-func (s *SeqMap[K, V]) DisorderedRange(f func(key K, value V) bool) {
-	s.mu.Lock()
+func (s *Map[K, V]) DisorderedRange(f func(key K, value V) bool) {
+	s.mu.RLock()
 	for key, val := range s.dirty {
 		if !f(key, val.Load().Value) {
 			break
 		}
 	}
-	s.mu.Unlock()
+	s.mu.RUnlock()
 }
 
-func (s *SeqMap[K, V]) Map() map[K]V {
+func (s *Map[K, V]) Map() map[K]V {
 	m := make(map[K]V)
 	s.DisorderedRange(func(key K, value V) bool {
 		m[key] = value
@@ -120,6 +120,6 @@ func (s *SeqMap[K, V]) Map() map[K]V {
 	return m
 }
 
-func NewSeqMap[K comparable, V any]() *SeqMap[K, V] {
-	return &SeqMap[K, V]{dirty: make(map[K]*atomic.Pointer[Value[V]])}
+func New[K comparable, V any]() *Map[K, V] {
+	return &Map[K, V]{dirty: make(map[K]*atomic.Pointer[Value[V]])}
 }
