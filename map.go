@@ -25,9 +25,13 @@ func (s KVs[K, V]) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s KVs[K, V]) Less(i, j int) bool { return s[i].Value.Load().Seq < s[j].Value.Load().Seq }
 
 type Map[K comparable, V any] struct {
-	offset int32
-	mu     sync.RWMutex
-	dirty  map[K]*atomic.Pointer[Value[V]]
+	size  int32
+	mu    sync.RWMutex
+	dirty map[K]*atomic.Pointer[Value[V]]
+}
+
+func (s *Map[K, V]) Size() int32 {
+	return atomic.LoadInt32(&s.size)
 }
 
 func (s *Map[K, V]) Store(key K, value V) {
@@ -41,9 +45,9 @@ func (s *Map[K, V]) Store(key K, value V) {
 		return
 	}
 
-	atomic.AddInt32(&s.offset, 1)
+	atomic.AddInt32(&s.size, 1)
 	val := atomic.Pointer[Value[V]]{}
-	val.Store(&Value[V]{Seq: s.offset, Value: value})
+	val.Store(&Value[V]{Seq: s.size, Value: value})
 	s.dirty[key] = &val
 
 	s.mu.Unlock()
@@ -68,7 +72,7 @@ func (s *Map[K, V]) Delete(key K) {
 		s.mu.Unlock()
 		return
 	}
-	atomic.AddInt32(&s.offset, -1)
+	atomic.AddInt32(&s.size, -1)
 	ptr.Store(nil)
 	ptr = nil
 
@@ -79,7 +83,7 @@ func (s *Map[K, V]) Delete(key K) {
 func (s *Map[K, V]) Range(f func(key K, value V) bool) {
 	s.mu.RLock()
 
-	vs := make(KVs[K, V], atomic.LoadInt32(&s.offset))
+	vs := make(KVs[K, V], atomic.LoadInt32(&s.size))
 	vsi := 0
 	for key, val := range s.dirty {
 		vs[vsi] = KV[K, V]{
@@ -91,7 +95,7 @@ func (s *Map[K, V]) Range(f func(key K, value V) bool) {
 
 	sort.Sort(vs)
 
-	for i := 0; i < int(atomic.LoadInt32(&s.offset)); i++ {
+	for i := 0; i < int(atomic.LoadInt32(&s.size)); i++ {
 		ptr := vs[i].Value.Load()
 		if !f(vs[i].Key, ptr.Value) {
 			break
@@ -118,6 +122,14 @@ func (s *Map[K, V]) Map() map[K]V {
 		return true
 	})
 	return m
+}
+
+func (s *Map[K, V]) Reset() {
+	s.mu.Lock()
+	atomic.StoreInt32(&s.size, 0)
+	s.dirty = nil
+	s.dirty = make(map[K]*atomic.Pointer[Value[V]])
+	s.mu.Unlock()
 }
 
 func New[K comparable, V any]() *Map[K, V] {
