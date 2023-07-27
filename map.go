@@ -56,12 +56,13 @@ func (s *Map[K, V]) Store(key K, value V) {
 func (s *Map[K, V]) Load(key K) (V, bool) {
 	s.mu.RLock()
 	ptr, ok := s.dirty[key]
-	s.mu.RUnlock()
 	if !ok {
+		s.mu.RUnlock()
 		var zero V
 		return zero, false
 	}
 	val := ptr.Load()
+	s.mu.RUnlock()
 	return val.Value, true
 }
 

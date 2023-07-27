@@ -3,6 +3,7 @@ package orderMap_test
 import (
 	orderMap "github.com/RealFax/order-map"
 	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -53,6 +54,48 @@ func TestMap_DisorderedRange(t *testing.T) {
 		t.Log("Key:", key, ", Value:", value)
 		return true
 	})
+}
+
+func TestConcurrency(t *testing.T) {
+	wg := sync.WaitGroup{}
+	bench := func(maxWorker int, worker func()) {
+		go func() {
+			wg.Add(1)
+			defer wg.Done()
+
+			for i := 0; i < maxWorker; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					worker()
+				}()
+			}
+		}()
+	}
+
+	bench(2000, func() {
+		testMap.Store("key", "value")
+	})
+
+	bench(2000, func() {
+		testMap.Load("key")
+	})
+
+	bench(2000, func() {
+		testMap.Delete("key")
+	})
+
+	bench(2000, func() {
+		testMap.Range(func(_ string, _ string) bool {
+			return true
+		})
+	})
+
+	bench(1000, func() {
+		testMap.Reset()
+	})
+
+	wg.Wait()
 }
 
 func BenchmarkMap_Store(b *testing.B) {
