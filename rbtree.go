@@ -4,7 +4,6 @@ package omap
 
 import (
 	"cmp"
-	"fmt"
 )
 
 // RBTree is a kind of self-balancing binary search tree in computer science.
@@ -12,8 +11,9 @@ import (
 // as the color (red or black) of the node. These color bits are used to ensure the tree
 // remains approximately balanced during insertions and deletions.
 type RBTree[K cmp.Ordered, V any] struct {
-	root *Node[K, V]
-	size int
+	size    int
+	root    *Node[K, V]
+	compare func(K, K) int
 }
 
 // Clear clears the RBTree
@@ -80,7 +80,7 @@ func (t *RBTree[K, V]) Insert(key K, value V) {
 
 	for x != nil {
 		y = x
-		if cmp.Compare(key, x.key) < 0 {
+		if t.compare(key, x.key) < 0 {
 			x = x.left
 		} else {
 			x = x.right
@@ -94,7 +94,7 @@ func (t *RBTree[K, V]) Insert(key K, value V) {
 		z.color = BLACK
 		t.root = z
 		return
-	} else if cmp.Compare(z.key, y.key) < 0 {
+	} else if t.compare(z.key, y.key) < 0 {
 		y.left = z
 	} else {
 		y.right = z
@@ -304,10 +304,10 @@ func (t *RBTree[K, V]) rightRotate(x *Node[K, V]) {
 func (t *RBTree[K, V]) findNode(key K) *Node[K, V] {
 	x := t.root
 	for x != nil {
-		if cmp.Compare(key, x.key) < 0 {
+		if t.compare(key, x.key) < 0 {
 			x = x.left
 		} else {
-			if cmp.Compare(key, x.key) == 0 {
+			if t.compare(key, x.key) == 0 {
 				return x
 			}
 			x = x.right
@@ -322,7 +322,7 @@ func (t *RBTree[K, V]) findFirstNode(key K) *Node[K, V] {
 	if node == nil {
 		return nil
 	}
-	if cmp.Compare(node.key, key) == 0 {
+	if t.compare(node.key, key) == 0 {
 		return node
 	}
 	return nil
@@ -337,12 +337,12 @@ func (t *RBTree[K, V]) findLowerBoundNode(x *Node[K, V], key K) *Node[K, V] {
 	if x == nil {
 		return nil
 	}
-	if cmp.Compare(key, x.key) <= 0 {
+	if t.compare(key, x.key) <= 0 {
 		ret := t.findLowerBoundNode(x.left, key)
 		if ret == nil {
 			return x
 		}
-		if cmp.Compare(ret.key, x.key) <= 0 {
+		if t.compare(ret.key, x.key) <= 0 {
 			return ret
 		}
 		return x
@@ -359,14 +359,14 @@ func (t *RBTree[K, V]) findUpperBoundNode(x *Node[K, V], key K) *Node[K, V] {
 	if x == nil {
 		return nil
 	}
-	if cmp.Compare(key, x.key) >= 0 {
+	if t.compare(key, x.key) >= 0 {
 		return t.findUpperBoundNode(x.right, key)
 	}
 	ret := t.findUpperBoundNode(x.left, key)
 	if ret == nil {
 		return x
 	}
-	if cmp.Compare(ret.key, x.key) <= 0 {
+	if t.compare(ret.key, x.key) <= 0 {
 		return ret
 	}
 	return x
@@ -381,59 +381,9 @@ func (t *RBTree[K, V]) Traversal(visitor KvVisitor[K, V]) {
 	}
 }
 
-// IsRbTree is a function use to test whether t is a RBTree or not
-func (t *RBTree[K, V]) IsRbTree() (bool, error) {
-	// Properties:
-	// 1. Each node is either red or black.
-	// 2. The root is black.
-	// 3. All leaves (NIL) are black.
-	// 4. If a node is red, then both its children are black.
-	// 5. Every path from a given node to any of its descendant NIL nodes contains the same number of black nodes.
-	_, property, ok := t.test(t.root)
-	if !ok {
-		return false, fmt.Errorf("violate property %v", property)
-	}
-	return true, nil
-}
-
-func (t *RBTree[K, V]) test(n *Node[K, V]) (int, int, bool) {
-
-	if n == nil { // property 3:
-		return 1, 0, true
-	}
-
-	if n == t.root && !n.color { // property 2:
-		return 1, 2, false
-	}
-	leftBlackCount, property, ok := t.test(n.left)
-	if !ok {
-		return leftBlackCount, property, ok
-	}
-	rightBlackCount, property, ok := t.test(n.right)
-	if !ok {
-		return rightBlackCount, property, ok
-	}
-
-	if rightBlackCount != leftBlackCount { // property 5:
-		return leftBlackCount, 5, false
-	}
-	blackCount := leftBlackCount
-
-	if !n.color {
-		if !getColor(n.left) || !getColor(n.right) { // property 4:
-			return 0, 4, false
-		}
-	} else {
-		blackCount++
-	}
-
-	// if n == t.root {
-	// 	fmt.Printf("blackCount:%v \n", blackCount)
-	// }
-	return blackCount, 0, true
-}
-
 // NewRBTree creates a new RBTree
-func NewRBTree[K cmp.Ordered, V any]() *RBTree[K, V] {
-	return &RBTree[K, V]{}
+func NewRBTree[K cmp.Ordered, V any](comparer func(K, K) int) *RBTree[K, V] {
+	return &RBTree[K, V]{
+		compare: comparer,
+	}
 }

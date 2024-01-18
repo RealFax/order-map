@@ -133,6 +133,14 @@ func (m *orderedMap[K, V]) Contains(key K) bool {
 	return n != nil
 }
 
-func New[K cmp.Ordered, V any]() Map[K, V] {
-	return &orderedMap[K, V]{tree: NewRBTree[K, V]()}
+func New[K cmp.Ordered, V any](opts ...Option[K, V]) Map[K, V] {
+	m := &orderedMap[K, V]{tree: NewRBTree[K, V](func(a K, b K) int {
+		return cmp.Compare(a, b)
+	})}
+
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	return m
 }
