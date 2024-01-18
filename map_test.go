@@ -1,111 +1,80 @@
-package orderMap_test
+package omap_test
 
 import (
-	orderMap "github.com/RealFax/order-map"
+	omap "github.com/RealFax/order-map"
 	"strconv"
-	"sync"
 	"testing"
 )
 
 var (
-	testMap = orderMap.New[string, string]()
+	m = omap.New[string, string]()
 )
 
-func init() {
-	testMap.Store("hello", "bonjour")
+func TestOrderedMap_Load(t *testing.T) {
+	m.Store("Hello", "123")
+	m.Store("Hello1", "Bonjour")
+
+	t.Log(m.Load("Hello"))
+	t.Log(m.Load("Hello1"))
 }
 
-func TestMap_Store(t *testing.T) {
-	testMap.Store("hello1", "bonjour")
+func TestOrderedMap_LoadOrStore(t *testing.T) {
+	m.Store("Key1", "Value1")
+	t.Log(m.LoadOrStore("Key1", "Value2"))
+	t.Log(m.LoadOrStore("Key2", "Value3"))
+	t.Log(m.Load("Key1"))
+	t.Log(m.Load("Key2"))
 }
 
-func TestMap_Load(t *testing.T) {
-	val, ok := testMap.Load("hello")
-	t.Log("State:", ok, ", Value:", val)
+func TestOrderedMap_LoadAndDelete(t *testing.T) {
+	m.Store("Key10", "Value10")
+	t.Log(m.LoadAndDelete("Key10"))
+	t.Log(m.Load("Key10"))
 }
 
-func TestMap_Delete(t *testing.T) {
-	testMap.Store("hello1", "bonjour")
-	val, ok := testMap.Load("hello1")
-	t.Log("State:", ok, ", Value:", val)
-
-	testMap.Delete("hello1")
-	val, ok = testMap.Load("hello1")
-	t.Log("State:", ok, ", Value:", val)
+func TestOrderedMap_Delete(t *testing.T) {
+	m.Store("Key20", "Value20")
+	m.Delete("Key20")
+	t.Log(m.Load("Key20"))
 }
 
-func TestMap_Range(t *testing.T) {
-	for i := 0; i < 5; i++ {
-		testMap.Store("test"+strconv.Itoa(i), "range!")
+func TestOrderedMap_Swap(t *testing.T) {
+	m.Store("Key30", "Value30")
+	t.Log(m.Load("Key30"))
+	t.Log(m.Swap("Key30", "Value31"))
+	t.Log(m.Swap("Key31", "Value32"))
+	t.Log(m.Load("Key30"))
+	t.Log(m.Load("Key31"))
+}
+
+func TestOrderedMap_CompareAndSwap(t *testing.T) {
+	m.Store("Key40", "Value40")
+	t.Log(m.CompareAndSwap("Key40", "Value40_", "Value41"))
+	t.Log(m.Load("Key40"))
+	t.Log(m.CompareAndSwap("Key40", "Value40", "Value41"))
+	t.Log(m.Load("Key40"))
+
+	t.Log(m.CompareAndSwap("Key41", "", "Value42"))
+	t.Log(m.Load("Key41"))
+
+}
+
+func TestOrderedMap_CompareAndDelete(t *testing.T) {
+	m.Store("Key50", "Value50")
+	m.CompareAndDelete("Key50", "Value50_")
+	t.Log(m.Load("Key50"))
+	m.CompareAndDelete("Key50", "Value50")
+	t.Log(m.Load("Key50"))
+}
+
+func TestOrderedMap_Range(t *testing.T) {
+	nm := order_map.New[int, string]()
+	for i := 0; i < 100; i++ {
+		nm.Store(i, "VALUE_"+strconv.Itoa(i))
 	}
 
-	testMap.Range(func(key string, value string) bool {
-		t.Log("Key:", key, ", Value:", value)
+	nm.Range(func(key int, value string) bool {
+		// t.Log(key, value)
 		return true
 	})
-}
-
-func TestMap_DisorderedRange(t *testing.T) {
-	for i := 0; i < 5; i++ {
-		testMap.Store("_test"+strconv.Itoa(i), "disordered_range!")
-	}
-
-	testMap.DisorderedRange(func(key string, value string) bool {
-		t.Log("Key:", key, ", Value:", value)
-		return true
-	})
-}
-
-func TestConcurrency(t *testing.T) {
-	wg := sync.WaitGroup{}
-	bench := func(maxWorker int, worker func()) {
-		go func() {
-			wg.Add(1)
-			defer wg.Done()
-
-			for i := 0; i < maxWorker; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					worker()
-				}()
-			}
-		}()
-	}
-
-	bench(2000, func() {
-		testMap.Store("key", "value")
-	})
-
-	bench(2000, func() {
-		testMap.Load("key")
-	})
-
-	bench(2000, func() {
-		testMap.Delete("key")
-	})
-
-	bench(2000, func() {
-		testMap.Range(func(_ string, _ string) bool {
-			return true
-		})
-	})
-
-	bench(1000, func() {
-		testMap.Reset()
-	})
-
-	wg.Wait()
-}
-
-func BenchmarkMap_Store(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		testMap.Store("key", "value")
-	}
-}
-
-func BenchmarkMap_Load(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		testMap.Load("hello")
-	}
 }

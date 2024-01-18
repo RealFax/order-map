@@ -1,138 +1,138 @@
-// implementation of high performance concurrent safe ordered map
-
-package orderMap
+package omap
 
 import (
-	"sort"
-	"sync"
+	"cmp"
+	"fmt"
 	"sync/atomic"
 )
 
-type Value[V any] struct {
-	Seq   int32
-	Value V
+type internal[K cmp.Ordered, V any] interface {
+	Load(K) (V, bool)
+	Store(K, V)
+	LoadOrStore(K, V) (V, bool)
+	LoadAndDelete(K) (V, bool)
+	Delete(K)
+	Swap(K, V) (V, bool)
+	CompareAndSwap(key K, old, new V) bool
+	CompareAndDelete(K, V) bool
+	Range(func(K, V) bool)
 }
 
-type KV[K comparable, V any] struct {
-	Key   K
-	Value *atomic.Pointer[Value[V]]
+type feature[K cmp.Ordered, V any] interface {
+	Len() int64
+	Contains(K) bool
 }
 
-type KVs[K comparable, V any] []KV[K, V]
-
-func (s KVs[K, V]) Len() int           { return len(s) }
-func (s KVs[K, V]) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s KVs[K, V]) Less(i, j int) bool { return s[i].Value.Load().Seq < s[j].Value.Load().Seq }
-
-type Map[K comparable, V any] struct {
-	size  int32
-	mu    sync.RWMutex
-	dirty map[K]*atomic.Pointer[Value[V]]
+type Map[K cmp.Ordered, V any] interface {
+	internal[K, V]
+	feature[K, V]
 }
 
-func (s *Map[K, V]) Size() int32 {
-	return atomic.LoadInt32(&s.size)
+func empty[V any]() V {
+	var e V
+	return e
 }
 
-func (s *Map[K, V]) Store(key K, value V) {
-	s.mu.Lock()
-	ptr, ok := s.dirty[key]
-	if ok {
-		oldVal := ptr.Load()
-		ptr.Swap(&Value[V]{Seq: oldVal.Seq, Value: value})
+func newPointerValue[V any](val V) *atomic.Pointer[V] {
+	p := &atomic.Pointer[V]{}
+	p.Store(&val)
+	return p
+}
 
-		s.mu.Unlock()
-		return
+type orderedMap[K cmp.Ordered, V any] struct {
+	tree *RBTree[K, V]
+}
+
+func (m *orderedMap[K, V]) Load(key K) (V, bool) {
+	node := m.tree.FindNode(key)
+	if node == nil {
+		return empty[V](), false
+	}
+	return node.Value(), true
+}
+
+func (m *orderedMap[K, V]) Store(key K, value V) {
+	_, _ = m.Swap(key, value)
+}
+
+func (m *orderedMap[K, V]) Swap(key K, value V) (V, bool) {
+	node := m.tree.FindNode(key)
+	if node == nil {
+		// node not found
+		m.tree.Insert(key, value)
+		return empty[V](), false
+	}
+	oldValue := node.Value()
+	node.SetValue(value)
+	return oldValue, true
+}
+
+func (m *orderedMap[K, V]) LoadOrStore(key K, value V) (V, bool) {
+	node := m.tree.FindNode(key)
+	if node != nil {
+		return node.Value(), true
+	}
+	m.tree.Insert(key, value)
+	return empty[V](), false
+}
+
+func (m *orderedMap[K, V]) LoadAndDelete(key K) (V, bool) {
+	node := m.tree.FindNode(key)
+	if node != nil {
+		m.tree.Delete(node)
+		return node.Value(), true
+	}
+	return empty[V](), false
+}
+
+func (m *orderedMap[K, V]) Delete(key K) {
+	node := m.tree.FindNode(key)
+	if node != nil {
+		m.tree.Delete(node)
+	}
+}
+
+func (m *orderedMap[K, V]) CompareAndSwap(key K, old, new V) bool {
+	node := m.tree.FindNode(key)
+	if node == nil {
+		return false
+	}
+	return node.value.CompareAndSwap(&old, &new)
+}
+
+func (m *orderedMap[K, V]) CompareAndDelete(key K, old V) bool {
+	node := m.tree.FindNode(key)
+	if node == nil {
+		return false
 	}
 
-	atomic.AddInt32(&s.size, 1)
-	val := atomic.Pointer[Value[V]]{}
-	val.Store(&Value[V]{Seq: s.size, Value: value})
-	s.dirty[key] = &val
-
-	s.mu.Unlock()
-}
-
-func (s *Map[K, V]) Load(key K) (V, bool) {
-	s.mu.RLock()
-	ptr, ok := s.dirty[key]
-	if !ok {
-		s.mu.RUnlock()
-		var zero V
-		return zero, false
+	p := node.value.Load()
+	if any(*p) != any(old) {
+		return false
 	}
-	val := ptr.Load()
-	s.mu.RUnlock()
-	return val.Value, true
+
+	m.tree.Delete(node)
+	return true
 }
 
-func (s *Map[K, V]) Delete(key K) {
-	s.mu.Lock()
-	ptr, ok := s.dirty[key]
-	if !ok {
-		s.mu.Unlock()
-		return
-	}
-	atomic.AddInt32(&s.size, -1)
-	ptr.Store(nil)
-	ptr = nil
-
-	delete(s.dirty, key)
-	s.mu.Unlock()
-}
-
-func (s *Map[K, V]) Range(f func(key K, value V) bool) {
-	s.mu.RLock()
-
-	vs := make(KVs[K, V], atomic.LoadInt32(&s.size))
-	vsi := 0
-	for key, val := range s.dirty {
-		vs[vsi] = KV[K, V]{
-			Key:   key,
-			Value: val,
+func (m *orderedMap[K, V]) Range(fc func(key K, value V) bool) {
+	for iter := m.tree.IterFirst(); iter.IsValid(); iter.Next() {
+		fmt.Println(iter.Key())
+		if !fc(iter.Key(), iter.Value()) {
+			return
 		}
-		vsi++
 	}
-
-	sort.Sort(vs)
-
-	for i := 0; i < int(atomic.LoadInt32(&s.size)); i++ {
-		ptr := vs[i].Value.Load()
-		if !f(vs[i].Key, ptr.Value) {
-			break
-		}
-	}
-
-	s.mu.RUnlock()
 }
 
-func (s *Map[K, V]) DisorderedRange(f func(key K, value V) bool) {
-	s.mu.RLock()
-	for key, val := range s.dirty {
-		if !f(key, val.Load().Value) {
-			break
-		}
-	}
-	s.mu.RUnlock()
+func (m *orderedMap[K, V]) Len() int64 {
+	return int64(m.tree.Size())
 }
 
-func (s *Map[K, V]) Map() map[K]V {
-	m := make(map[K]V)
-	s.DisorderedRange(func(key K, value V) bool {
-		m[key] = value
-		return true
-	})
-	return m
+func (m *orderedMap[K, V]) Contains(key K) bool {
+	n := m.tree.FindNode(key)
+	return n != nil
 }
 
-func (s *Map[K, V]) Reset() {
-	s.mu.Lock()
-	atomic.StoreInt32(&s.size, 0)
-	s.dirty = nil
-	s.dirty = make(map[K]*atomic.Pointer[Value[V]])
-	s.mu.Unlock()
-}
-
-func New[K comparable, V any]() *Map[K, V] {
-	return &Map[K, V]{dirty: make(map[K]*atomic.Pointer[Value[V]])}
+func New[K cmp.Ordered, V any]() Map[K, V] {
+	return &orderedMap[K, V]{tree: NewRBTree[K, V]()}
 }
