@@ -68,7 +68,7 @@ func TestOrderedMap_CompareAndDelete(t *testing.T) {
 }
 
 func TestOrderedMap_Range(t *testing.T) {
-	nm := order_map.New[int, string]()
+	nm := omap.New[int, string]()
 	for i := 0; i < 100; i++ {
 		nm.Store(i, "VALUE_"+strconv.Itoa(i))
 	}
