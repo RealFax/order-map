@@ -1,13 +1,13 @@
-package omap_test
+package odmap_test
 
 import (
-	omap "github.com/RealFax/order-map"
+	odmap "github.com/RealFax/order-map"
 	"strconv"
 	"testing"
 )
 
 var (
-	m     = omap.New[string, string]()
+	m     = odmap.New[string, string]()
 	empty = struct{}{}
 )
 
@@ -69,7 +69,7 @@ func TestOrderedMap_CompareAndDelete(t *testing.T) {
 }
 
 func TestOrderedMap_Range(t *testing.T) {
-	nm := omap.New[int, string]()
+	nm := odmap.New[int, string]()
 	for i := 0; i < 100; i++ {
 		nm.Store(i, "VALUE_"+strconv.Itoa(i))
 	}
@@ -81,8 +81,20 @@ func TestOrderedMap_Range(t *testing.T) {
 }
 
 func BenchmarkOmap_Store(b *testing.B) {
-	internal := omap.New[int, struct{}]()
+	internal := odmap.New[int, struct{}]()
 	for i := 0; i < b.N; i++ {
 		internal.Store(i, empty)
 	}
+}
+
+func ExampleNew() {
+	m := odmap.New[int, string]()
+	m.Store(0, "Hello")
+	m.Store(1, "World")
+	m.Store(2, "😄😄😄")
+
+	m.Range(func(key int, value string) bool {
+		print(value, " ")
+		return true
+	})
 }

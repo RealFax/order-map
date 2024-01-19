@@ -1,6 +1,6 @@
 // source: https://github.com/liyue201/gostl/blob/master/utils/iterator/iterator.go
 
-package omap
+package odmap
 
 import "cmp"
 

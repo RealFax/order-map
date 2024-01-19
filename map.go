@@ -1,4 +1,4 @@
-package omap
+package odmap
 
 import (
 	"cmp"
@@ -121,7 +121,7 @@ func (m *omap[K, V]) Contains(key K) bool {
 	return n != nil
 }
 
-func newOMap[K cmp.Ordered, V any](opts ...Option[K, V]) *omap[K, V] {
+func newODMap[K cmp.Ordered, V any](opts ...Option[K, V]) *omap[K, V] {
 	m := &omap[K, V]{tree: NewRBTree[K, V](func(a K, b K) int {
 		return cmp.Compare(a, b)
 	})}
@@ -134,5 +134,5 @@ func newOMap[K cmp.Ordered, V any](opts ...Option[K, V]) *omap[K, V] {
 }
 
 func New[K cmp.Ordered, V any](opts ...Option[K, V]) Map[K, V] {
-	return newOMap[K, V](opts...)
+	return newODMap[K, V](opts...)
 }

@@ -7,6 +7,23 @@ _We ensure that the API and semantics are compatible with `sync.Map`. If you hav
 
 ## Quickstart
 
+```go
+package main
+
+import odmap "github.com/RealFax/order-map"
+
+func main() {
+	m := odmap.New[int, string]()
+	m.Store(0, "Hello")
+	m.Store(1, "World")
+	m.Store(2, "😄😄😄")
+
+	m.Range(func(key int, value string) bool {
+		print(value, " ")
+		return true
+	})
+}
+```
 ## Roadmap
 _Welcome to propose more features in the issue_
 
