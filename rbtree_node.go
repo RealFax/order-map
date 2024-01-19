@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 )
 
-type KvVisitor[K cmp.Ordered, V any] func(key K, value V) bool
+type KVisitor[K cmp.Ordered, V any] func(key K, value V) bool
 
 // Color defines node color type
 type Color bool
@@ -109,4 +109,15 @@ func getColor[K cmp.Ordered, V any](n *Node[K, V]) Color {
 		return BLACK
 	}
 	return n.color
+}
+
+func empty[V any]() V {
+	var e V
+	return e
+}
+
+func newPointerValue[V any](val V) *atomic.Pointer[V] {
+	p := &atomic.Pointer[V]{}
+	p.Store(&val)
+	return p
 }

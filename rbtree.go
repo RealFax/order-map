@@ -373,7 +373,7 @@ func (t *RBTree[K, V]) findUpperBoundNode(x *Node[K, V], key K) *Node[K, V] {
 }
 
 // Traversal traversals elements in the RBTree, it will not stop until to the end of RBTree or the visitor returns false
-func (t *RBTree[K, V]) Traversal(visitor KvVisitor[K, V]) {
+func (t *RBTree[K, V]) Traversal(visitor KVisitor[K, V]) {
 	for node := t.First(); node != nil; node = node.Next() {
 		if !visitor(node.key, node.Value()) {
 			break

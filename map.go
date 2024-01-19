@@ -3,7 +3,6 @@ package omap
 import (
 	"cmp"
 	"fmt"
-	"sync/atomic"
 )
 
 type internal[K cmp.Ordered, V any] interface {
@@ -28,22 +27,11 @@ type Map[K cmp.Ordered, V any] interface {
 	feature[K, V]
 }
 
-func empty[V any]() V {
-	var e V
-	return e
-}
-
-func newPointerValue[V any](val V) *atomic.Pointer[V] {
-	p := &atomic.Pointer[V]{}
-	p.Store(&val)
-	return p
-}
-
-type orderedMap[K cmp.Ordered, V any] struct {
+type omap[K cmp.Ordered, V any] struct {
 	tree *RBTree[K, V]
 }
 
-func (m *orderedMap[K, V]) Load(key K) (V, bool) {
+func (m *omap[K, V]) Load(key K) (V, bool) {
 	node := m.tree.FindNode(key)
 	if node == nil {
 		return empty[V](), false
@@ -51,11 +39,11 @@ func (m *orderedMap[K, V]) Load(key K) (V, bool) {
 	return node.Value(), true
 }
 
-func (m *orderedMap[K, V]) Store(key K, value V) {
+func (m *omap[K, V]) Store(key K, value V) {
 	_, _ = m.Swap(key, value)
 }
 
-func (m *orderedMap[K, V]) Swap(key K, value V) (V, bool) {
+func (m *omap[K, V]) Swap(key K, value V) (V, bool) {
 	node := m.tree.FindNode(key)
 	if node == nil {
 		// node not found
@@ -67,7 +55,7 @@ func (m *orderedMap[K, V]) Swap(key K, value V) (V, bool) {
 	return oldValue, true
 }
 
-func (m *orderedMap[K, V]) LoadOrStore(key K, value V) (V, bool) {
+func (m *omap[K, V]) LoadOrStore(key K, value V) (V, bool) {
 	node := m.tree.FindNode(key)
 	if node != nil {
 		return node.Value(), true
@@ -76,7 +64,7 @@ func (m *orderedMap[K, V]) LoadOrStore(key K, value V) (V, bool) {
 	return empty[V](), false
 }
 
-func (m *orderedMap[K, V]) LoadAndDelete(key K) (V, bool) {
+func (m *omap[K, V]) LoadAndDelete(key K) (V, bool) {
 	node := m.tree.FindNode(key)
 	if node != nil {
 		m.tree.Delete(node)
@@ -85,14 +73,14 @@ func (m *orderedMap[K, V]) LoadAndDelete(key K) (V, bool) {
 	return empty[V](), false
 }
 
-func (m *orderedMap[K, V]) Delete(key K) {
+func (m *omap[K, V]) Delete(key K) {
 	node := m.tree.FindNode(key)
 	if node != nil {
 		m.tree.Delete(node)
 	}
 }
 
-func (m *orderedMap[K, V]) CompareAndSwap(key K, old, new V) bool {
+func (m *omap[K, V]) CompareAndSwap(key K, old, new V) bool {
 	node := m.tree.FindNode(key)
 	if node == nil {
 		return false
@@ -100,7 +88,7 @@ func (m *orderedMap[K, V]) CompareAndSwap(key K, old, new V) bool {
 	return node.value.CompareAndSwap(&old, &new)
 }
 
-func (m *orderedMap[K, V]) CompareAndDelete(key K, old V) bool {
+func (m *omap[K, V]) CompareAndDelete(key K, old V) bool {
 	node := m.tree.FindNode(key)
 	if node == nil {
 		return false
@@ -115,7 +103,7 @@ func (m *orderedMap[K, V]) CompareAndDelete(key K, old V) bool {
 	return true
 }
 
-func (m *orderedMap[K, V]) Range(fc func(key K, value V) bool) {
+func (m *omap[K, V]) Range(fc func(key K, value V) bool) {
 	for iter := m.tree.IterFirst(); iter.IsValid(); iter.Next() {
 		fmt.Println(iter.Key())
 		if !fc(iter.Key(), iter.Value()) {
@@ -124,17 +112,17 @@ func (m *orderedMap[K, V]) Range(fc func(key K, value V) bool) {
 	}
 }
 
-func (m *orderedMap[K, V]) Len() int64 {
+func (m *omap[K, V]) Len() int64 {
 	return int64(m.tree.Size())
 }
 
-func (m *orderedMap[K, V]) Contains(key K) bool {
+func (m *omap[K, V]) Contains(key K) bool {
 	n := m.tree.FindNode(key)
 	return n != nil
 }
 
-func New[K cmp.Ordered, V any](opts ...Option[K, V]) Map[K, V] {
-	m := &orderedMap[K, V]{tree: NewRBTree[K, V](func(a K, b K) int {
+func newOMap[K cmp.Ordered, V any](opts ...Option[K, V]) *omap[K, V] {
+	m := &omap[K, V]{tree: NewRBTree[K, V](func(a K, b K) int {
 		return cmp.Compare(a, b)
 	})}
 
@@ -143,4 +131,8 @@ func New[K cmp.Ordered, V any](opts ...Option[K, V]) Map[K, V] {
 	}
 
 	return m
+}
+
+func New[K cmp.Ordered, V any](opts ...Option[K, V]) Map[K, V] {
+	return newOMap[K, V](opts...)
 }
