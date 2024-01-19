@@ -7,7 +7,8 @@ import (
 )
 
 var (
-	m = omap.New[string, string]()
+	m     = omap.New[string, string]()
+	empty = struct{}{}
 )
 
 func TestOrderedMap_Load(t *testing.T) {
@@ -77,4 +78,11 @@ func TestOrderedMap_Range(t *testing.T) {
 		// t.Log(key, value)
 		return true
 	})
+}
+
+func BenchmarkOmap_Store(b *testing.B) {
+	internal := omap.New[int, struct{}]()
+	for i := 0; i < b.N; i++ {
+		internal.Store(i, empty)
+	}
 }
