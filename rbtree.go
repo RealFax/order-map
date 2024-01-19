@@ -11,9 +11,10 @@ import (
 // as the color (red or black) of the node. These color bits are used to ensure the tree
 // remains approximately balanced during insertions and deletions.
 type RBTree[K cmp.Ordered, V any] struct {
-	size    int
-	root    *Node[K, V]
-	compare func(K, K) int
+	size     int
+	root     *Entry[K, V]
+	expunged *V
+	compare  func(K, K) int
 }
 
 // Clear clears the RBTree
@@ -23,30 +24,30 @@ func (t *RBTree[K, V]) Clear() {
 }
 
 // FindNode the first node that the key is equal to the passed key and return it
-func (t *RBTree[K, V]) FindNode(key K) *Node[K, V] {
+func (t *RBTree[K, V]) FindNode(key K) *Entry[K, V] {
 	return t.findFirstNode(key)
 }
 
 // Begin returns the node with minimum key in the RBTree
-func (t *RBTree[K, V]) Begin() *Node[K, V] {
+func (t *RBTree[K, V]) Begin() *Entry[K, V] {
 	return t.First()
 }
 
 // First returns the node with minimum key in the RBTree
-func (t *RBTree[K, V]) First() *Node[K, V] {
+func (t *RBTree[K, V]) First() *Entry[K, V] {
 	if t.root == nil {
 		return nil
 	}
 	return minimum(t.root)
 }
 
-// RBegin returns the Node with maximum key in the RBTree
-func (t *RBTree[K, V]) RBegin() *Node[K, V] {
+// RBegin returns the Entry with maximum key in the RBTree
+func (t *RBTree[K, V]) RBegin() *Entry[K, V] {
 	return t.Last()
 }
 
-// Last returns the Node with maximum key in the RBTree
-func (t *RBTree[K, V]) Last() *Node[K, V] {
+// Last returns the Entry with maximum key in the RBTree
+func (t *RBTree[K, V]) Last() *Entry[K, V] {
 	if t.root == nil {
 		return nil
 	}
@@ -76,7 +77,7 @@ func (t *RBTree[K, V]) Size() int {
 // Insert inserts a key-value pair into the RBTree.
 func (t *RBTree[K, V]) Insert(key K, value V) {
 	x := t.root
-	var y *Node[K, V]
+	var y *Entry[K, V]
 
 	for x != nil {
 		y = x
@@ -87,7 +88,13 @@ func (t *RBTree[K, V]) Insert(key K, value V) {
 		}
 	}
 
-	z := &Node[K, V]{parent: y, color: RED, key: key, value: newPointerValue(value)}
+	z := &Entry[K, V]{
+		expunged: t.expunged,
+		parent:   y,
+		color:    RED,
+		key:      key,
+		value:    newPointerValue(value),
+	}
 	t.size++
 
 	if y == nil {
@@ -102,8 +109,8 @@ func (t *RBTree[K, V]) Insert(key K, value V) {
 	t.rbInsertFixup(z)
 }
 
-func (t *RBTree[K, V]) rbInsertFixup(z *Node[K, V]) {
-	var y *Node[K, V]
+func (t *RBTree[K, V]) rbInsertFixup(z *Entry[K, V]) {
+	var y *Entry[K, V]
 	for z.parent != nil && !z.parent.color {
 		if z.parent == z.parent.parent.left {
 			y = z.parent.parent.right
@@ -143,13 +150,13 @@ func (t *RBTree[K, V]) rbInsertFixup(z *Node[K, V]) {
 }
 
 // Delete deletes node from the RBTree
-func (t *RBTree[K, V]) Delete(node *Node[K, V]) {
+func (t *RBTree[K, V]) Delete(node *Entry[K, V]) {
 	z := node
 	if z == nil {
 		return
 	}
 
-	var x, y *Node[K, V]
+	var x, y *Entry[K, V]
 	if z.left != nil && z.right != nil {
 		y = successor(z)
 	} else {
@@ -185,8 +192,8 @@ func (t *RBTree[K, V]) Delete(node *Node[K, V]) {
 	t.size--
 }
 
-func (t *RBTree[K, V]) rbDeleteFixup(x, parent *Node[K, V]) {
-	var w *Node[K, V]
+func (t *RBTree[K, V]) rbDeleteFixup(x, parent *Entry[K, V]) {
+	var w *Entry[K, V]
 	for x != t.root && getColor(x) {
 		if x != nil {
 			parent = x.parent
@@ -202,7 +209,7 @@ func (t *RBTree[K, V]) rbDeleteFixup(x, parent *Node[K, V]) {
 	}
 }
 
-func (t *RBTree[K, V]) rbFixupLeft(x, parent, w *Node[K, V]) (*Node[K, V], *Node[K, V]) {
+func (t *RBTree[K, V]) rbFixupLeft(x, parent, w *Entry[K, V]) (*Entry[K, V], *Entry[K, V]) {
 	w = parent.right
 	if !w.color {
 		w.color = BLACK
@@ -233,7 +240,7 @@ func (t *RBTree[K, V]) rbFixupLeft(x, parent, w *Node[K, V]) (*Node[K, V], *Node
 	return x, w
 }
 
-func (t *RBTree[K, V]) rbFixupRight(x, parent, w *Node[K, V]) (*Node[K, V], *Node[K, V]) {
+func (t *RBTree[K, V]) rbFixupRight(x, parent, w *Entry[K, V]) (*Entry[K, V], *Entry[K, V]) {
 	w = parent.left
 	if !w.color {
 		w.color = BLACK
@@ -264,7 +271,7 @@ func (t *RBTree[K, V]) rbFixupRight(x, parent, w *Node[K, V]) (*Node[K, V], *Nod
 	return x, w
 }
 
-func (t *RBTree[K, V]) leftRotate(x *Node[K, V]) {
+func (t *RBTree[K, V]) leftRotate(x *Entry[K, V]) {
 	y := x.right
 	x.right = y.left
 	if y.left != nil {
@@ -282,7 +289,7 @@ func (t *RBTree[K, V]) leftRotate(x *Node[K, V]) {
 	x.parent = y
 }
 
-func (t *RBTree[K, V]) rightRotate(x *Node[K, V]) {
+func (t *RBTree[K, V]) rightRotate(x *Entry[K, V]) {
 	y := x.left
 	x.left = y.right
 	if y.right != nil {
@@ -301,7 +308,7 @@ func (t *RBTree[K, V]) rightRotate(x *Node[K, V]) {
 }
 
 // findNode finds the node that its key is equal to the passed key, and returns it.
-func (t *RBTree[K, V]) findNode(key K) *Node[K, V] {
+func (t *RBTree[K, V]) findNode(key K) *Entry[K, V] {
 	x := t.root
 	for x != nil {
 		if t.compare(key, x.key) < 0 {
@@ -317,7 +324,7 @@ func (t *RBTree[K, V]) findNode(key K) *Node[K, V] {
 }
 
 // findNode finds the first node that its key is equal to the passed key, and returns it
-func (t *RBTree[K, V]) findFirstNode(key K) *Node[K, V] {
+func (t *RBTree[K, V]) findFirstNode(key K) *Entry[K, V] {
 	node := t.FindLowerBoundNode(key)
 	if node == nil {
 		return nil
@@ -329,11 +336,11 @@ func (t *RBTree[K, V]) findFirstNode(key K) *Node[K, V] {
 }
 
 // FindLowerBoundNode finds the first node that its key is equal or greater than the passed key, and returns it
-func (t *RBTree[K, V]) FindLowerBoundNode(key K) *Node[K, V] {
+func (t *RBTree[K, V]) FindLowerBoundNode(key K) *Entry[K, V] {
 	return t.findLowerBoundNode(t.root, key)
 }
 
-func (t *RBTree[K, V]) findLowerBoundNode(x *Node[K, V], key K) *Node[K, V] {
+func (t *RBTree[K, V]) findLowerBoundNode(x *Entry[K, V], key K) *Entry[K, V] {
 	if x == nil {
 		return nil
 	}
@@ -351,11 +358,11 @@ func (t *RBTree[K, V]) findLowerBoundNode(x *Node[K, V], key K) *Node[K, V] {
 }
 
 // FindUpperBoundNode finds the first node that its key is greater than the passed key, and returns it
-func (t *RBTree[K, V]) FindUpperBoundNode(key K) *Node[K, V] {
+func (t *RBTree[K, V]) FindUpperBoundNode(key K) *Entry[K, V] {
 	return t.findUpperBoundNode(t.root, key)
 }
 
-func (t *RBTree[K, V]) findUpperBoundNode(x *Node[K, V], key K) *Node[K, V] {
+func (t *RBTree[K, V]) findUpperBoundNode(x *Entry[K, V], key K) *Entry[K, V] {
 	if x == nil {
 		return nil
 	}
@@ -381,9 +388,31 @@ func (t *RBTree[K, V]) Traversal(visitor KVisitor[K, V]) {
 	}
 }
 
+func (t *RBTree[K, V]) get(key K) (*Entry[K, V], bool) {
+	entry := t.findFirstNode(key)
+	return entry, entry != nil
+}
+
+func (t *RBTree[K, V]) put(key K, value V) {
+	entry := t.findFirstNode(key)
+	if entry == nil {
+		t.Insert(key, value)
+		return
+	}
+	entry.value.Store(&value)
+}
+
+func (t *RBTree[K, V]) del(key K) {
+	entry := t.findFirstNode(key)
+	if entry != nil {
+		t.Delete(entry)
+	}
+}
+
 // NewRBTree creates a new RBTree
 func NewRBTree[K cmp.Ordered, V any](comparer func(K, K) int) *RBTree[K, V] {
 	return &RBTree[K, V]{
-		compare: comparer,
+		expunged: new(V),
+		compare:  comparer,
 	}
 }

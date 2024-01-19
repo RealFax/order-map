@@ -21,11 +21,11 @@ type ConstBidIterator[T any] interface {
 
 // RBTreeIterator is an iterator implementation of RBTree
 type RBTreeIterator[K cmp.Ordered, V any] struct {
-	node *Node[K, V]
+	node *Entry[K, V]
 }
 
 // NewIterator creates a RBTreeIterator from the passed node
-func NewIterator[K cmp.Ordered, V any](node *Node[K, V]) *RBTreeIterator[K, V] {
+func NewIterator[K cmp.Ordered, V any](node *Entry[K, V]) *RBTreeIterator[K, V] {
 	return &RBTreeIterator[K, V]{node: node}
 }
 
@@ -62,7 +62,7 @@ func (iter *RBTreeIterator[K, V]) Value() V {
 
 // SetValue sets the node's value of the iterator point to
 func (iter *RBTreeIterator[K, V]) SetValue(val V) error {
-	iter.node.SetValue(val)
+	iter.node.value.Store(&val)
 	return nil
 }
 

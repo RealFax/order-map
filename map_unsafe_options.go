@@ -1,3 +1,5 @@
+//go:build !safety_map
+
 package odmap
 
 import "cmp"

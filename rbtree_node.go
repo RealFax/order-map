@@ -18,23 +18,24 @@ const (
 	BLACK = true
 )
 
-// Node is a tree node
-type Node[K cmp.Ordered, V any] struct {
-	parent *Node[K, V]
-	left   *Node[K, V]
-	right  *Node[K, V]
-	color  Color
-	key    K
-	value  *atomic.Pointer[V]
+// Entry is a tree entry
+type Entry[K cmp.Ordered, V any] struct {
+	expunged *V
+	parent   *Entry[K, V]
+	left     *Entry[K, V]
+	right    *Entry[K, V]
+	color    Color
+	key      K
+	value    *atomic.Pointer[V]
 }
 
 // Key returns node's key
-func (n *Node[K, V]) Key() K {
+func (n *Entry[K, V]) Key() K {
 	return n.key
 }
 
 // Value returns node's value
-func (n *Node[K, V]) Value() V {
+func (n *Entry[K, V]) Value() V {
 	p := n.value.Load()
 	if p == nil {
 		return empty[V]()
@@ -42,23 +43,119 @@ func (n *Node[K, V]) Value() V {
 	return *p
 }
 
-// SetValue sets node's value
-func (n *Node[K, V]) SetValue(val V) {
-	n.value.Store(&val)
+func (n *Entry[K, V]) load() (V, bool) {
+	p := n.value.Load()
+	if p == nil || p == n.expunged {
+		return empty[V](), false
+	}
+	return *p, true
 }
 
-// Next returns the Node's successor as an iterator.
-func (n *Node[K, V]) Next() *Node[K, V] {
+func (n *Entry[K, V]) tryCompareAndSwap(old, new V) bool {
+	p := n.value.Load()
+	if p == nil || p == n.expunged || any(*p) != any(old) {
+		return false
+	}
+
+	nc := new
+	for {
+		if n.value.CompareAndSwap(p, &nc) {
+			return true
+		}
+
+		p = n.value.Load()
+
+		if p == nil || p == n.expunged || any(*p) != any(old) {
+			return false
+		}
+	}
+}
+
+func (n *Entry[K, V]) unexpungeLocked() bool {
+	return n.value.CompareAndSwap(n.expunged, nil)
+}
+
+func (n *Entry[K, V]) swapLocked(i *V) *V {
+	return n.value.Swap(i)
+}
+
+func (n *Entry[K, V]) tryLoadOrStore(i V) (V, bool, bool) {
+	p := n.value.Load()
+	if p == n.expunged {
+		return empty[V](), false, false
+	}
+	if p != nil {
+		return *p, true, true
+	}
+
+	ic := i
+	for {
+		if n.value.CompareAndSwap(nil, &ic) {
+			return i, false, true
+		}
+
+		p = n.value.Load()
+		if p == n.expunged {
+			return empty[V](), false, false
+		}
+
+		if p != nil {
+			return *p, true, true
+		}
+	}
+}
+
+func (n *Entry[K, V]) delete() (V, bool) {
+	for {
+		p := n.value.Load()
+		if p == nil || p == n.expunged {
+			return empty[V](), false
+		}
+
+		if n.value.CompareAndSwap(p, nil) {
+			return *p, true
+		}
+	}
+}
+
+func (n *Entry[K, V]) trySwap(i *V) (*V, bool) {
+	for {
+		p := n.value.Load()
+		if p == n.expunged {
+			return nil, false
+		}
+		if n.value.CompareAndSwap(p, i) {
+			return p, true
+		}
+	}
+}
+
+func (n *Entry[K, V]) tryExpungeLocked() bool {
+	p := n.value.Load()
+	for p == nil {
+		if n.value.CompareAndSwap(nil, n.expunged) {
+			return true
+		}
+		p = n.value.Load()
+	}
+
+	return p == n.expunged
+}
+
+// ---- iterator ----
+
+// Next returns the Entry's successor as an iterator.
+func (n *Entry[K, V]) Next() *Entry[K, V] {
 	return successor(n)
 }
 
-// Prev returns the Node's predecessor as an iterator.
-func (n *Node[K, V]) Prev() *Node[K, V] {
+// Prev returns the Entry's predecessor as an iterator.
+func (n *Entry[K, V]) Prev() *Entry[K, V] {
 	return presuccessor(n)
 }
 
-// successor returns the successor of the Node
-func successor[K cmp.Ordered, V any](x *Node[K, V]) *Node[K, V] {
+// successor returns the successor of the Entry
+func successor[K cmp.Ordered, V any](x *Entry[K, V]) *Entry[K, V] {
 	if x.right != nil {
 		return minimum(x.right)
 	}
@@ -70,8 +167,8 @@ func successor[K cmp.Ordered, V any](x *Node[K, V]) *Node[K, V] {
 	return y
 }
 
-// presuccessor returns the presuccessor of the Node
-func presuccessor[K cmp.Ordered, V any](x *Node[K, V]) *Node[K, V] {
+// presuccessor returns the presuccessor of the Entry
+func presuccessor[K cmp.Ordered, V any](x *Entry[K, V]) *Entry[K, V] {
 	if x.left != nil {
 		return maximum(x.left)
 	}
@@ -87,16 +184,16 @@ func presuccessor[K cmp.Ordered, V any](x *Node[K, V]) *Node[K, V] {
 	return nil
 }
 
-// minimum finds the minimum Node of subtree n.
-func minimum[K cmp.Ordered, V any](n *Node[K, V]) *Node[K, V] {
+// minimum finds the minimum Entry of subtree n.
+func minimum[K cmp.Ordered, V any](n *Entry[K, V]) *Entry[K, V] {
 	for n.left != nil {
 		n = n.left
 	}
 	return n
 }
 
-// maximum finds the maximum Node of subtree n.
-func maximum[K cmp.Ordered, V any](n *Node[K, V]) *Node[K, V] {
+// maximum finds the maximum Entry of subtree n.
+func maximum[K cmp.Ordered, V any](n *Entry[K, V]) *Entry[K, V] {
 	for n.right != nil {
 		n = n.right
 	}
@@ -104,7 +201,7 @@ func maximum[K cmp.Ordered, V any](n *Node[K, V]) *Node[K, V] {
 }
 
 // getColor returns the node's color
-func getColor[K cmp.Ordered, V any](n *Node[K, V]) Color {
+func getColor[K cmp.Ordered, V any](n *Entry[K, V]) Color {
 	if n == nil {
 		return BLACK
 	}
