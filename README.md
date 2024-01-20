@@ -29,4 +29,4 @@ _Welcome to propose more features in the issue_
 
 - [x] Concurrency safety (add `--tags=safety_map` enabled)
 
-_⚠️Note. Features such as: Len, Contains are not stable and may be removed or have semantic changes in the future._
+_⚠️Note. Features such as: Len (`safety_map` unsupported), Contains are not stable and may be removed or have semantic changes in the future._

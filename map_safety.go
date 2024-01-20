@@ -236,8 +236,6 @@ func (m *safetyMap[K, V]) Range(fc func(key K, value V) bool) {
 		m.mu.Unlock()
 	}
 
-	read.m.IterFirst()
-
 	for iter := read.m.IterFirst(); iter.IsValid(); iter.Next() {
 		v, ok := iter.node.load()
 		if !ok {
