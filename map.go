@@ -2,6 +2,7 @@ package odmap
 
 import (
 	"cmp"
+	"encoding/json"
 )
 
 type internal[K cmp.Ordered, V any] interface {
@@ -19,6 +20,7 @@ type internal[K cmp.Ordered, V any] interface {
 type feature[K cmp.Ordered, V any] interface {
 	Len() int64
 	Contains(K) bool
+	json.Marshaler
 }
 
 type Map[K cmp.Ordered, V any] interface {

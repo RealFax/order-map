@@ -2,7 +2,10 @@
 
 package odmap
 
-import "cmp"
+import (
+	"cmp"
+	"encoding/json"
+)
 
 type omap[K cmp.Ordered, V any] struct {
 	tree *RBTree[K, V]
@@ -95,6 +98,15 @@ func (m *omap[K, V]) Len() int64 {
 func (m *omap[K, V]) Contains(key K) bool {
 	n := m.tree.FindNode(key)
 	return n != nil
+}
+
+func (m *omap[K, V]) MarshalJSON() ([]byte, error) {
+	r := make(map[K]V)
+	m.Range(func(key K, value V) bool {
+		r[key] = value
+		return true
+	})
+	return json.Marshal(r)
 }
 
 func newODMap[K cmp.Ordered, V any](opts ...Option[K, V]) *omap[K, V] {

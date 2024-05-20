@@ -4,6 +4,7 @@ package odmap
 
 import (
 	"cmp"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 )
@@ -252,6 +253,15 @@ func (m *safetyMap[K, V]) Len() int64 { return 0 }
 func (m *safetyMap[K, V]) Contains(key K) bool {
 	_, found := m.Load(key)
 	return found
+}
+
+func (m *safetyMap[K, V]) MarshalJSON() ([]byte, error) {
+	r := make(map[K]V)
+	m.Range(func(key K, value V) bool {
+		r[key] = value
+		return true
+	})
+	return json.Marshal(r)
 }
 
 func New[K cmp.Ordered, V any](opts ...Option[K, V]) Map[K, V] {
