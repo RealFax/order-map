@@ -5,6 +5,11 @@ import (
 	"encoding/json"
 )
 
+type Pair[K cmp.Ordered, V any] struct {
+	Key   K `json:"key"`
+	Value V `json:"value"`
+}
+
 type internal[K cmp.Ordered, V any] interface {
 	Load(K) (V, bool)
 	Store(K, V)

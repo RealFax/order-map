@@ -256,12 +256,12 @@ func (m *safetyMap[K, V]) Contains(key K) bool {
 }
 
 func (m *safetyMap[K, V]) MarshalJSON() ([]byte, error) {
-	r := make(map[K]V)
+	s := make([]Pair[K, V], 0, 1024)
 	m.Range(func(key K, value V) bool {
-		r[key] = value
+		s = append(s, Pair[K, V]{Key: key, Value: value})
 		return true
 	})
-	return json.Marshal(r)
+	return json.Marshal(s)
 }
 
 func New[K cmp.Ordered, V any](opts ...Option[K, V]) Map[K, V] {
